@@ -137,6 +137,9 @@ html{
 
 
 /* Service-section */
+#service-container{
+    overflow-x: scroll;
+}
 
 #services{
     margin: 34px;
