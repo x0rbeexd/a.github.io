@@ -1,0 +1,65 @@
+
+
+/* Navigation */
+#navbar{
+    flex-direction: column;
+}
+
+/* Home */
+#home{
+    height: 280px;
+    padding: 3px 25px;
+    
+}
+
+#home::before{
+    height: 585px;
+}
+
+#home p{
+    font-size: 12px;
+}
+
+/* Services */
+
+#services{
+    flex-direction: column;
+
+}
+
+#services .box {
+    border: 2px solid brown;
+    padding: 12px;
+    margin: 2px 0px;
+    border-radius: 23px;
+}
+#services .box img{
+    width: 185px;
+}
+
+/* client */
+#clients{
+    flex-wrap: wrap;
+}
+#clients img{
+    width: 125px;
+    padding: 2px 25px;
+}
+.client-item{
+    padding: 10px;
+}
+
+
+/* Utility-classses */
+
+
+.h-primary {
+    font-size: 1.2rem;
+    padding: 54px;
+}
+
+/* Button */
+.btn{
+    font-size: 10px;
+    padding: 2px 10px;
+}
