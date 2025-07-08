@@ -1,8 +1,8 @@
-# Find AS-REP roastable accounts (no preauth required)
 $Searcher = New-Object DirectoryServices.DirectorySearcher
-$Searcher.Filter = "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))"
+$Searcher.Filter = "(objectCategory=person)"
+$Searcher.PageSize = 1000
+$Searcher.PropertiesToLoad.Add("samaccountname") > $null
 $Results = $Searcher.FindAll()
 foreach ($Result in $Results) {
-    $User = $Result.Properties
-    Write-Output ("[AS-REP] " + $User.samaccountname)
+    $Result.Properties.samaccountname
 }
