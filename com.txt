@@ -1,21 +1,42 @@
-$UserList = Get-Content ".\CleanUsers.txt"
-$Searcher = New-Object DirectoryServices.DirectorySearcher
-$Searcher.PageSize = 1000
+$hosts = Get-Content "livehosts.txt"
+$outputDir = "$PWD\HostReports"
+if (!(Test-Path $outputDir)) { New-Item -Path $outputDir -ItemType Directory | Out-Null }
 
-foreach ($User in $UserList) {
-    $Searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$User))"
-    $Searcher.PropertiesToLoad.Clear()
-    $Searcher.PropertiesToLoad.Add("samaccountname") > $null
-    $Searcher.PropertiesToLoad.Add("description") > $null
+foreach ($host in $hosts) {
+    $outFile = Join-Path $outputDir "$host.txt"
+    "=== Recon for $host ===`n" | Set-Content $outFile
 
-    $result = $Searcher.FindOne()
-
-    if ($result -ne $null) {
-        $sam = $result.Properties.samaccountname[0]
-        $desc = $result.Properties.description
-
-        if ($desc -and $desc[0].Trim() -ne "") {
-            Write-Host "$sam : $($desc[0])"
-        }
+    # Hostname
+    try {
+        $hostname = ([System.Net.Dns]::GetHostEntry($host)).HostName
+        "Hostname: $hostname" | Tee-Object -FilePath $outFile -Append
+    } catch {
+        "Hostname: Unknown" | Tee-Object -FilePath $outFile -Append
     }
+
+    # SMB Shares
+    try {
+        "Shares:" | Tee-Object -FilePath $outFile -Append
+        net view \\$host | Tee-Object -FilePath $outFile -Append
+    } catch {
+        "Error viewing shares" | Tee-Object -FilePath $outFile -Append
+    }
+
+    # Attempt Null Session
+    try {
+        "Attempting IPC$ Null Session..." | Tee-Object -FilePath $outFile -Append
+        net use \\$host\IPC$ "" /user:"" | Tee-Object -FilePath $outFile -Append
+    } catch {
+        "Null session failed" | Tee-Object -FilePath $outFile -Append
+    }
+
+    # User sessions (WMI)
+    try {
+        $user = (Get-WmiObject -Class Win32_ComputerSystem -ComputerName $host -ErrorAction Stop).UserName
+        "Logged in user: $user" | Tee-Object -FilePath $outFile -Append
+    } catch {
+        "Logged in user: Unknown or access denied" | Tee-Object -FilePath $outFile -Append
+    }
+
+    "`n" | Tee-Object -FilePath $outFile -Append
 }
