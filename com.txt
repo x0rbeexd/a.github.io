@@ -1,11 +1,13 @@
-$domain = ([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).Name
-$root = "LDAP://$domain"
 $searcher = New-Object DirectoryServices.DirectorySearcher
-$searcher.SearchRoot = New-Object DirectoryServices.DirectoryEntry($root)
-$searcher.Filter = "(&(objectCategory=person)(objectClass=user)(userAccountControl:1.2.840.113556.1.4.803:=4194304))"
-$searcher.PropertiesToLoad.Add("samaccountname") > $null
+$searcher.Filter = "(objectClass=user)"
 $searcher.PageSize = 1000
+$searcher.PropertiesToLoad.Add("samaccountname") > $null
+$searcher.PropertiesToLoad.Add("userAccountControl") > $null
 $results = $searcher.FindAll()
-$results | ForEach-Object {
-    $_.Properties.samaccountname[0]
-} | Out-File asrep_candidates.txt
+
+foreach ($res in $results) {
+    $uac = $res.Properties.useraccountcontrol[0]
+    if ($uac -band 4194304) {
+        $res.Properties.samaccountname[0]
+    }
+}
