@@ -1,56 +1,21 @@
-# Input: List of usernames (one per line)
-# Output: user_recon.csv with selected fields
-
 $UserList = Get-Content ".\CleanUsers.txt"
-$Output = @()
+$Searcher = New-Object DirectoryServices.DirectorySearcher
+$Searcher.PageSize = 1000
 
 foreach ($User in $UserList) {
-    $raw = net user $User /domain 2>$null
+    $Searcher.Filter = "(&(objectCategory=person)(objectClass=user)(sAMAccountName=$User))"
+    $Searcher.PropertiesToLoad.Clear()
+    $Searcher.PropertiesToLoad.Add("samaccountname") > $null
+    $Searcher.PropertiesToLoad.Add("description") > $null
 
-    if (-not $raw) { continue }  # Skip if no output
+    $result = $Searcher.FindOne()
 
-    $userInfo = @{
-        Username                 = ""
-        FullName                = ""
-        Comment                 = ""
-        AccountActive           = ""
-        AccountExpires          = ""
-        PasswordLastSet         = ""
-        PasswordExpires         = ""
-        PasswordChangeable      = ""
-        PasswordRequired        = ""
-        UserMayChangePassword   = ""
-        WorkstationsAllowed     = ""
-        LogonScript             = ""
-        UserProfile             = ""
-        HomeDirectory           = ""
-        LastLogon               = ""
-        GlobalGroups            = ""
-    }
+    if ($result -ne $null) {
+        $sam = $result.Properties.samaccountname[0]
+        $desc = $result.Properties.description
 
-    foreach ($line in $raw) {
-        if ($line -match "User name\s+(.+)") { $userInfo.Username = $Matches[1].Trim() }
-        elseif ($line -match "Full Name\s+(.+)") { $userInfo.FullName = $Matches[1].Trim() }
-        elseif ($line -match "Comment\s+(.+)") { $userInfo.Comment = $Matches[1].Trim() }
-        elseif ($line -match "Account active\s+(.+)") { $userInfo.AccountActive = $Matches[1].Trim() }
-        elseif ($line -match "Account expires\s+(.+)") { $userInfo.AccountExpires = $Matches[1].Trim() }
-        elseif ($line -match "Password last set\s+(.+)") { $userInfo.PasswordLastSet = $Matches[1].Trim() }
-        elseif ($line -match "Password expires\s+(.+)") { $userInfo.PasswordExpires = $Matches[1].Trim() }
-        elseif ($line -match "Password changeable\s+(.+)") { $userInfo.PasswordChangeable = $Matches[1].Trim() }
-        elseif ($line -match "Password required\s+(.+)") { $userInfo.PasswordRequired = $Matches[1].Trim() }
-        elseif ($line -match "User may change password\s+(.+)") { $userInfo.UserMayChangePassword = $Matches[1].Trim() }
-        elseif ($line -match "Workstations allowed\s+(.+)") { $userInfo.WorkstationsAllowed = $Matches[1].Trim() }
-        elseif ($line -match "Logon script\s+(.+)") { $userInfo.LogonScript = $Matches[1].Trim() }
-        elseif ($line -match "User profile\s+(.+)") { $userInfo.UserProfile = $Matches[1].Trim() }
-        elseif ($line -match "Home directory\s+(.+)") { $userInfo.HomeDirectory = $Matches[1].Trim() }
-        elseif ($line -match "Last logon\s+(.+)") { $userInfo.LastLogon = $Matches[1].Trim() }
-        elseif ($line -match "Global Group memberships\s+(.+)") {
-            $userInfo.GlobalGroups = $Matches[1].Trim().Replace("*", "").Replace("  ", ", ")
+        if ($desc -and $desc[0].Trim() -ne "") {
+            Write-Host "$sam : $($desc[0])"
         }
     }
-
-    $Output += New-Object PSObject -Property $userInfo
 }
-
-$Output | Export-Csv -NoTypeInformation -Encoding UTF8 -Path ".\user_recon.csv"
-Write-Output "`n✅ Output saved to: user_recon.csv"
