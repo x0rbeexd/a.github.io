@@ -1,1 +1,24 @@
+📌 Step 1: Find Base DN (one-time)
+bash
+Copy code
 ldapsearch -x -H ldap://10.0.0.5 -D "corp\\testuser" -w 'P@ssw0rd!' -b "" -s base namingcontexts
+Look for something like:
+
+bash
+Copy code
+namingContexts: DC=corp,DC=local
+This gives you your Base DN for LDAP.
+
+📌 Step 2: Enumerate All Users (with sAMAccountName)
+bash
+Copy code
+ldapsearch -x -H ldap://10.0.0.5 \
+  -D "corp\\testuser" -w 'P@ssw0rd!' \
+  -b "DC=corp,DC=local" \
+  "(&(objectCategory=person)(objectClass=user))" \
+  sAMAccountName | grep "^sAMAccountName:" | awk '{print $2}' > clean_users.txt
+✅ This writes all valid usernames to clean_users.txt
+
+
+
+cat all_users.txt | grep -oP '\[\+\] RID \d+: \K.*(?= \()' > clean_users.txt
