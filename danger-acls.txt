@@ -1,0 +1,45 @@
+$mySid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+$myGroups = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).Groups | ForEach-Object {
+    $_.Translate([System.Security.Principal.SecurityIdentifier]).Value
+}
+
+# Build filter list of SIDs to match (user + groups)
+$mySidList = $myGroups + $mySid
+
+$dangerousRights = @(
+    "GenericAll", "GenericWrite", "WriteOwner", "WriteDACL", "AllExtendedRights"
+)
+
+$domainDN = ([ADSI]"").distinguishedName
+$searcher = New-Object DirectoryServices.DirectorySearcher
+$searcher.Filter = "(&(objectClass=user)(!(objectClass=computer)))"
+$searcher.PropertiesToLoad.Add("distinguishedName") > $null
+$searcher.PageSize = 500
+
+$results = $searcher.FindAll()
+$output = @()
+
+foreach ($result in $results) {
+    $dn = $result.Properties["distinguishedname"][0]
+    $obj = [ADSI]("LDAP://" + $dn)
+    $acls = $obj.psbase.ObjectSecurity.Access
+
+    foreach ($ace in $acls) {
+        if ($mySidList -contains $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) {
+            if ($dangerousRights -contains $ace.ActiveDirectoryRights.ToString()) {
+                $output += [PSCustomObject]@{
+                    TargetUser           = $dn
+                    MyAccessRight        = $ace.ActiveDirectoryRights.ToString()
+                    ACE_Type             = $ace.ObjectType
+                    IdentityReference    = $ace.IdentityReference.ToString()
+                }
+            }
+        }
+    }
+}
+
+# Output to screen
+$output | Format-Table -AutoSize
+
+# Save to file
+$output | Out-File "Dangerous_ACLs_MyUser_Can_Abuse.txt"
