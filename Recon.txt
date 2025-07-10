@@ -1,0 +1,96 @@
+extended_output_dir = "/mnt/data/Native_AD_Enumeration_Extended"
+os.makedirs(extended_output_dir, exist_ok=True)
+
+# Extended command set for native enumeration (PowerView replacements)
+extended_commands = {
+    "01_Get_Current_Domain.txt": """
+# Get current domain name
+([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).Name | Out-File Get_Current_Domain.txt
+""",
+    "02_Get_Another_Domain_Object.txt": """
+# Try to connect to another domain via ADSI (if reachable/trusted)
+$domain = [ADSI]"LDAP://moneycorp.local"
+$domain.distinguishedName | Out-File Get_Another_Domain_Object.txt
+""",
+    "03_Get_Domain_SID.txt": """
+# Get domain SID from current user context
+([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.AccountDomainSid.Value | Out-File Get_Domain_SID.txt
+""",
+    "04_Get_DomainPolicy_Local.txt": """
+# Export local security policy and parse for password/lockout settings
+secedit /export /cfg C:\\windows\\temp\\secpol.cfg
+Select-String -Path C:\\windows\\temp\\secpol.cfg -Pattern "Minimum|Maximum|Lockout|Password|Enforce" | Out-File Get_DomainPolicy_Local.txt
+""",
+    "05_Get_Domain_Controllers.txt": """
+# List current domain controllers
+([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | Select-Object Name | Out-File Get_Domain_Controllers.txt
+""",
+    "06_Get_Domain_Users.txt": """
+# Get all domain users
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(objectClass=user)"
+$searcher.PageSize = 500
+$searcher.PropertiesToLoad.Add("samaccountname") > $null
+$searcher.FindAll() | ForEach-Object { $_.Properties.samaccountname } | Out-File Get_Domain_Users.txt
+""",
+    "07_Get_User_Properties.txt": """
+# Get all properties for a specific user
+$user = "student1"
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(&(objectClass=user)(samaccountname=$user))"
+$searcher.PageSize = 1
+$result = $searcher.FindOne()
+$result.Properties | Out-File Get_User_Properties.txt
+""",
+    "08_Search_User_Description.txt": """
+# Search users by description text
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(&(objectClass=user)(description=*built*))"
+$searcher.PropertiesToLoad.Add("samaccountname") > $null
+$searcher.PropertiesToLoad.Add("description") > $null
+$searcher.PageSize = 1000
+$searcher.FindAll() | ForEach-Object { $_.Properties | Select-Object samaccountname, description } | Out-File Search_User_Description.txt
+""",
+    "09_Get_Domain_Computers.txt": """
+# List domain computers
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(objectCategory=computer)"
+$searcher.PropertiesToLoad.Add("name") > $null
+$searcher.PageSize = 1000
+$searcher.FindAll() | ForEach-Object { $_.Properties.name } | Out-File Get_Domain_Computers.txt
+""",
+    "10_Get_Domain_Groups.txt": """
+# List all domain groups
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(objectClass=group)"
+$searcher.PropertiesToLoad.Add("name") > $null
+$searcher.PageSize = 1000
+$searcher.FindAll() | ForEach-Object { $_.Properties.name } | Out-File Get_Domain_Groups.txt
+""",
+    "11_Get_Organization_Units.txt": """
+# Get all OUs in the domain
+$searcher = [System.DirectoryServices.DirectorySearcher]::new()
+$searcher.Filter = "(objectClass=organizationalUnit)"
+$searcher.PropertiesToLoad.Add("ou") > $null
+$searcher.PageSize = 1000
+$searcher.FindAll() | ForEach-Object { $_.Properties.ou } | Out-File Get_Organization_Units.txt
+""",
+    "12_Get_LocalGroups_Remote.txt": """
+# List local groups on a remote system (admin required)
+$computer = "dcorp-dc"
+Invoke-Command -ComputerName $computer -ScriptBlock { Get-LocalGroup } | Out-File LocalGroups_Remote.txt
+""",
+    "13_Get_LocalGroupMembers_Remote.txt": """
+# Get local group members (admin required)
+$computer = "dcorp-dc"
+Invoke-Command -ComputerName $computer -ScriptBlock { Get-LocalGroupMember -Group "Administrators" } | Out-File LocalGroupMembers_Remote.txt
+""",
+    "14_Get_Share_Info.txt": """
+# List network shares (local)
+Get-WmiObject -Class Win32_Share | Select-Object Name, Path | Out-File Local_Shares.txt
+""",
+    "15_Get_LoggedOnUsers_Remote.txt": """
+# Query active sessions (admin + RemoteRegistry)
+query user /server:dcorp-adminsrv | Out-File Get_LoggedOn_Users_Remote.txt
+""",
+}
