@@ -1,0 +1,63 @@
+✅ Native PowerShell Replacements: User Hunting & Session Discovery
+🔹 1. Find Local Group Members (RDP & WinRM)
+powershell
+Copy
+Edit
+# Replace "TARGET_COMPUTER" with actual host
+$computer = "TARGET_COMPUTER"
+
+Invoke-Command -ComputerName $computer -ScriptBlock {
+    Get-LocalGroupMember -Group "Remote Desktop Users"
+    Get-LocalGroupMember -Group "Remote Management Users"
+} | Out-File RDP_RemoteMgmt_Users.txt
+🔹 2. Find Machines Where Current User Has Local Admin Access (Noisy)
+powershell
+Copy
+Edit
+# hostlist.txt should contain a list of hostnames/IPs
+$computers = Get-Content C:\hostlist.txt
+
+foreach ($comp in $computers) {
+    try {
+        Invoke-Command -ComputerName $comp -ScriptBlock { whoami } -ErrorAction Stop
+        "$comp - ACCESS OK" | Out-File LocalAdmin_Access_Check.txt -Append
+    } catch {
+        "$comp - ACCESS DENIED" | Out-File LocalAdmin_Access_Check.txt -Append
+    }
+}
+🔹 3. Find Machines via WMI Admin Access (Low-noise)
+powershell
+Copy
+Edit
+$computers = Get-Content C:\hostlist.txt
+
+foreach ($comp in $computers) {
+    try {
+        Get-WmiObject -Class Win32_OperatingSystem -ComputerName $comp -ErrorAction Stop | Out-Null
+        "$comp - WMI ACCESS OK" | Out-File WMI_Admin_Access.txt -Append
+    } catch {
+        "$comp - WMI ACCESS DENIED" | Out-File WMI_Admin_Access.txt -Append
+    }
+}
+🔹 4. Find Last Logged-on User via Remote Registry
+powershell
+Copy
+Edit
+# Admin + Remote Registry Service required
+$computer = "TARGET_COMPUTER"
+
+reg query "\\$computer\HKEY_USERS" | Out-File RemoteRegistry_LoggedOn.txt
+🔹 5. Stealthy Session Discovery via Open Shares
+powershell
+Copy
+Edit
+$computers = Get-Content C:\hostlist.txt
+
+foreach ($comp in $computers) {
+    try {
+        net view \\$comp | Out-Null
+        "$comp - Likely Reachable" | Out-File Stealth_Share_Check.txt -Append
+    } catch {
+        "$comp - No response" | Out-File Stealth_Share_Check.txt -Append
+    }
+}
