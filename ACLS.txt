@@ -1,0 +1,55 @@
+🔹 1. Get ACLs on an AD Object by SAM Account Name (e.g., student1)
+powershell
+Copy
+Edit
+# Replace student1 with the username
+$user = "student1"
+
+# Bind to user object using ADSI
+$userPath = "LDAP://CN=$user,CN=Users," + ([ADSI]"").distinguishedName
+$userObj = [ADSI]$userPath
+
+# Get ACL
+$acl = $userObj.psbase.ObjectSecurity
+$acl.Access | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize
+💡 This gives you all ACEs (Access Control Entries) for the AD object student1.
+
+🔹 2. Get ACLs on a Group (e.g., Domain Admins)
+powershell
+Copy
+Edit
+# Replace with your actual domain DN if needed
+$groupPath = "LDAP://CN=Domain Admins,CN=Users,DC=dollarcorp,DC=moneycorp,DC=local"
+$groupObj = [ADSI]$groupPath
+
+$groupACL = $groupObj.psbase.ObjectSecurity
+$groupACL.Access | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize
+🔹 3. Find Replication Permissions (DS-Replication-Get-Changes)
+powershell
+Copy
+Edit
+# Bind to the domain root
+$domainRoot = [ADSI]"LDAP://DC=dollarcorp,DC=moneycorp,DC=local"
+$domainACL = $domainRoot.psbase.ObjectSecurity
+
+$domainACL.Access | Where-Object {
+    ($_.ObjectType -match "replication-get") -or ($_.ActiveDirectoryRights -match "GenericAll")
+} | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType
+⚠️ This doesn’t resolve GUIDs like PowerView does, but you can map common GUIDs manually from Microsoft's well-known GUIDs list.
+
+🔹 4. Check ACLs on a File System Path (e.g., SYSVOL)
+powershell
+Copy
+Edit
+$path = "\\\\dcorp-dc.dollarcorp.moneycorp.local\\sysvol"
+
+(Get-Acl $path).Access | Format-Table IdentityReference, FileSystemRights, AccessControlType
+🔹 5. Get SID and Compare with ACL SID (Manual Match)
+powershell
+Copy
+Edit
+# Get SID of a user
+$user = New-Object System.Security.Principal.NTAccount("foothold")
+$sid = $user.Translate([System.Security.Principal.SecurityIdentifier]).Value
+
+# Now compare with SID in ACL (example shown above in ACL outputs)
