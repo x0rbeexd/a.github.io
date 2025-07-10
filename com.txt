@@ -1,3 +1,49 @@
-pip download --platform win_amd64 --only-binary=:all: \
-    --python-version 310 --implementation cp --abi cp310 \
-    -r requirements.txt -d responder-windows-wheels
+# Define the folder to scan and output file
+$FolderPath = "C:\Path\To\Your\Folder"
+$OutputFile = "C:\Path\To\output_sensitive_data.txt"
+
+# Define regex patterns to look for secrets
+$patterns = @(
+    'password\s*=\s*["''][^"'']+["'']',
+    'pwd\s*=\s*["''][^"'']+["'']',
+    'apikey\s*=\s*["''][^"'']+["'']',
+    'api[_\-]?key\s*[:=]\s*["''][^"'']+["'']',
+    'secret\s*=\s*["''][^"'']+["'']',
+    'token\s*=\s*["''][^"'']+["'']',
+    'authorization\s*[:=]\s*["''][^"'']+["'']',
+    '-----BEGIN PRIVATE KEY-----',
+    'access[_\-]?key\s*[:=]\s*[A-Z0-9]{20}',
+    'aws_secret_access_key\s*[:=]\s*[A-Za-z0-9/+=]{40}',
+    '[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}',  # JWT
+    'connection\s*string\s*=\s*["''][^"'']+["'']',
+    '[a-zA-Z0-9_-]{32,}' # generic base64-style long tokens
+)
+
+# Clear the output file if it exists
+if (Test-Path $OutputFile) {
+    Clear-Content $OutputFile
+}
+
+Write-Output "`n[+] Scanning folder: $FolderPath`n"
+
+# Get all readable text files (exclude binaries)
+Get-ChildItem -Path $FolderPath -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+        $lines = Get-Content $_.FullName -ErrorAction Stop
+    } catch {
+        return
+    }
+
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        foreach ($pattern in $patterns) {
+            if ($lines[$i] -match $pattern) {
+                $match = $matches[0]
+                Add-Content -Path $OutputFile -Value "[+] File: $($_.FullName) [Line $($i+1)]"
+                Add-Content -Path $OutputFile -Value "    >> $match"
+                Add-Content -Path $OutputFile -Value ""
+            }
+        }
+    }
+}
+
+Write-Output "`n[+] Done! Results saved to: $OutputFile`n"
