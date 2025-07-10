@@ -1,11 +1,6 @@
 Get-Content .\computers.txt | ForEach-Object {
     if (Test-Connection $_ -Count 1 -Quiet) {
-        try {
-            "$_:$([System.Net.Dns]::GetHostAddresses($_)[0].IPAddressToString)"
-        } catch {
-            "$_:IP_Resolve_Failed"
-        }
-    } else {
-        "$_:Offline"
+        $ip = ([System.Net.Dns]::GetHostAddresses($_) | Select-Object -First 1).IPAddressToString
+        "$_`:$ip"
     }
 } > HostToIP.txt
