@@ -1,13 +1,17 @@
+# Get current user and group SIDs
 $mySid = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
-$myGroups = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).Groups | ForEach-Object {
+$myGroupSIDs = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).Groups | ForEach-Object {
     $_.Translate([System.Security.Principal.SecurityIdentifier]).Value
 }
+$mySIDList = $myGroupSIDs + $mySid
 
-# Build filter list of SIDs to match (user + groups)
-$mySidList = $myGroups + $mySid
-
+# Define the high-risk rights as enums (bitwise safe)
 $dangerousRights = @(
-    "GenericAll", "GenericWrite", "WriteOwner", "WriteDACL", "AllExtendedRights"
+    [System.DirectoryServices.ActiveDirectoryRights]::GenericAll,
+    [System.DirectoryServices.ActiveDirectoryRights]::GenericWrite,
+    [System.DirectoryServices.ActiveDirectoryRights]::WriteDacl,
+    [System.DirectoryServices.ActiveDirectoryRights]::WriteOwner,
+    [System.DirectoryServices.ActiveDirectoryRights]::ExtendedRight
 )
 
 $domainDN = ([ADSI]"").distinguishedName
@@ -21,25 +25,42 @@ $output = @()
 
 foreach ($result in $results) {
     $dn = $result.Properties["distinguishedname"][0]
-    $obj = [ADSI]("LDAP://" + $dn)
-    $acls = $obj.psbase.ObjectSecurity.Access
+    try {
+        $obj = [ADSI]("LDAP://$dn")
+        $acls = $obj.psbase.ObjectSecurity.Access
 
-    foreach ($ace in $acls) {
-        if ($mySidList -contains $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value) {
-            if ($dangerousRights -contains $ace.ActiveDirectoryRights.ToString()) {
-                $output += [PSCustomObject]@{
-                    TargetUser           = $dn
-                    MyAccessRight        = $ace.ActiveDirectoryRights.ToString()
-                    ACE_Type             = $ace.ObjectType
-                    IdentityReference    = $ace.IdentityReference.ToString()
+        foreach ($ace in $acls) {
+            # Convert ACE identity to SID
+            $aceSid = $null
+            try {
+                $aceSid = $ace.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+            } catch {
+                continue
+            }
+
+            # If current user or group is listed in ACE
+            if ($mySIDList -contains $aceSid) {
+                foreach ($right in $dangerousRights) {
+                    if (($ace.ActiveDirectoryRights -band $right) -eq $right) {
+                        $output += [PSCustomObject]@{
+                            TargetUser        = $dn
+                            MyAccessRight     = $right.ToString()
+                            IdentityReference = $ace.IdentityReference.ToString()
+                        }
+                    }
                 }
             }
         }
+    } catch {
+        Write-Host "❌ Failed to process $dn"
     }
 }
 
-# Output to screen
-$output | Format-Table -AutoSize
-
-# Save to file
-$output | Out-File "Dangerous_ACLs_MyUser_Can_Abuse.txt"
+# Print or write the results
+if ($output.Count -eq 0) {
+    Write-Host "`n🚫 No dangerous ACLs found for current user.`n"
+} else {
+    $output | Format-Table -AutoSize
+    $output | Out-File Dangerous_ACLs_MyUser_CanAbuse.txt
+    Write-Host "`n✅ Saved to Dangerous_ACLs_MyUser_CanAbuse.txt`n"
+}
