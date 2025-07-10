@@ -1,1 +1,26 @@
 cat computers.txt | xargs -P 20 -I{} sh -c 'ip=$(host {} | awk "/has address/ { print \$4 }"); echo "{}:$ip"' > HostToIP.txt
+
+
+# Optional: Set the domain controller explicitly if not on wg00m domain
+$domain = "wg00m"
+$ldapRoot = "LDAP://$domain"
+
+# Create a Directory Entry
+$entry = New-Object System.DirectoryServices.DirectoryEntry($ldapRoot)
+
+# Create a searcher to find all computer objects
+$searcher = New-Object System.DirectoryServices.DirectorySearcher
+$searcher.SearchRoot = $entry
+$searcher.Filter = "(objectCategory=computer)"
+$searcher.PropertiesToLoad.Add("name") > $null
+$searcher.PageSize = 500
+
+# Run search and extract computer names
+$results = $searcher.FindAll()
+$computers = $results | ForEach-Object { $_.Properties["name"][0] }
+
+# Save to file
+$computers | Out-File "Computers_in_$domain.txt"
+
+# Show on screen
+$computers
