@@ -24,3 +24,14 @@ $computers | Out-File "Computers_in_$domain.txt"
 
 # Show on screen
 $computers
+
+
+
+
+Get-Content Computers_in_wg00m.txt | ForEach-Object {
+    if (Test-Connection -ComputerName $_ -Count 1 -Quiet) {
+        "$_ is alive" | Out-File Alive.txt -Append
+    } else {
+        "$_ is unreachable" | Out-File Dead.txt -Append
+    }
+}
