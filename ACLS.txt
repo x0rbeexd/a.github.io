@@ -17,16 +17,30 @@ $acl.Access | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType,
 
 # ---- USERS ----
 $domainDN = ([ADSI]"").distinguishedName
+
 Get-Content .\UserList.txt | ForEach-Object {
     $user = $_.Trim()
-    $ldapPath = "LDAP://CN=$user,CN=Users,$domainDN"
-    try {
-        $obj = [ADSI]$ldapPath
-        $acl = $obj.psbase.ObjectSecurity.Access
-        $acl | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize | Out-File "ACL_User_$user.txt"
-        Write-Host "✔️ Processed user: $user"
-    } catch {
-        Write-Host "❌ Failed to process user: $user"
+
+    # Search for user DN
+    $searcher = New-Object DirectoryServices.DirectorySearcher
+    $searcher.Filter = "(&(objectCategory=person)(sAMAccountName=$user))"
+    $searcher.SearchScope = "Subtree"
+    $result = $searcher.FindOne()
+
+    if ($result) {
+        $userDN = $result.Properties.distinguishedname[0]
+        $ldapPath = "LDAP://$userDN"
+
+        try {
+            $obj = [ADSI]$ldapPath
+            $acl = $obj.psbase.ObjectSecurity.Access
+            $acl | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize | Out-File "ACL_User_$user.txt"
+            Write-Host "✔️ Processed user: $user"
+        } catch {
+            Write-Host "❌ Failed to read ACL for user: $user"
+        }
+    } else {
+        Write-Host "❌ User not found: $user"
     }
 }
 
