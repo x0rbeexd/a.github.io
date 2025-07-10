@@ -1,1 +1,11 @@
-Get-Content .\computers.txt | ForEach-Object { if (Test-Connection -ComputerName $_ -Count 1 -Quiet) { "$_:$(Resolve-DnsName $_ | Where-Object { $_.Type -eq 'A' } | Select-Object -ExpandProperty IPAddress)" } } > HostToIP.txt
+Get-Content .\computers.txt | ForEach-Object {
+    if (Test-Connection $_ -Count 1 -Quiet) {
+        try {
+            "$_:$([System.Net.Dns]::GetHostAddresses($_)[0].IPAddressToString)"
+        } catch {
+            "$_:IP_Resolve_Failed"
+        }
+    } else {
+        "$_:Offline"
+    }
+} > HostToIP.txt
