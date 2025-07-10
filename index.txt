@@ -1,6 +1,1 @@
-Get-Content .\computers.txt | ForEach-Object {
-    if (Test-Connection $_ -Count 1 -Quiet) {
-        $ip = ([System.Net.Dns]::GetHostAddresses($_) | Select-Object -First 1).IPAddressToString
-        "$_`:$ip"
-    }
-} > HostToIP.txt
+cat computers.txt | xargs -P 20 -I{} sh -c 'ip=$(host {} | awk "/has address/ { print \$4 }"); echo "{}:$ip"' > HostToIP.txt
