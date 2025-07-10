@@ -14,6 +14,36 @@ $acl = $userObj.psbase.ObjectSecurity
 $acl.Access | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize
 💡 This gives you all ACEs (Access Control Entries) for the AD object student1.
 
+
+# ---- USERS ----
+$domainDN = ([ADSI]"").distinguishedName
+Get-Content .\UserList.txt | ForEach-Object {
+    $user = $_.Trim()
+    $ldapPath = "LDAP://CN=$user,CN=Users,$domainDN"
+    try {
+        $obj = [ADSI]$ldapPath
+        $acl = $obj.psbase.ObjectSecurity.Access
+        $acl | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize | Out-File "ACL_User_$user.txt"
+        Write-Host "✔️ Processed user: $user"
+    } catch {
+        Write-Host "❌ Failed to process user: $user"
+    }
+}
+
+# ---- GROUPS ----
+Get-Content .\GroupList.txt | ForEach-Object {
+    $group = $_.Trim()
+    $ldapPath = "LDAP://CN=$group,CN=Users,$domainDN"
+    try {
+        $obj = [ADSI]$ldapPath
+        $acl = $obj.psbase.ObjectSecurity.Access
+        $acl | Format-Table IdentityReference, ActiveDirectoryRights, ObjectType, InheritanceType -AutoSize | Out-File "ACL_Group_$($group -replace ' ', '_').txt"
+        Write-Host "✔️ Processed group: $group"
+    } catch {
+        Write-Host "❌ Failed to process group: $group"
+    }
+}
+
 🔹 2. Get ACLs on a Group (e.g., Domain Admins)
 powershell
 Copy
