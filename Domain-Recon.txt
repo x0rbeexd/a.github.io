@@ -91,6 +91,7 @@ Get-WmiObject -Class Win32_Share | Select-Object Name, Path | Out-File Local_Sha
 """,
     "15_Get_LoggedOnUsers_Remote.txt": """
 # Query active sessions (admin + RemoteRegistry)
-query user /server:dcorp-adminsrv | Out-File Get_LoggedOn_Users_Remote.txt
+Get-Content Get_Domain_Computers.txt | ForEach-Object { $comp=$_; "========== $comp ==========" | Out-File All_LoggedOn_Users.txt -Append; try { query user /server:$comp | Out-File All_LoggedOn_Users.txt -Append } catch { "ERROR querying $comp`n" | Out-File All_LoggedOn_Users.txt -Append } }
+
 """,
 }
