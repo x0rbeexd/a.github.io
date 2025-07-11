@@ -1,0 +1,12 @@
+echo 'deb http://http.kali.org/kali kali-rolling main non-free-firmware contrib non-free' | sudo tee /etc/apt/sources.list
+sudo apt update
+
+
+
+
+
+sudo sed -i 's|https://download.docker.com|http://download.docker.com|' /etc/apt/sources.list.d/docker.list
+sudo apt update
+sudo rm /etc/apt/sources.list.d/docker.list
+sudo apt update
+sudo apt install docker.io docker-compose
