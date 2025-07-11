@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Define domain suffix
+domain="wwg00m.rootdom.net"
+
+# Loop through each hostname
+while read -r h; do
+    fqdn="${h}.${domain}"
+
+    # Resolve IP using getent (faster and cleaner than ping)
+    ip=$(getent hosts "$fqdn" | awk '{print $1}')
+
+    if [[ -n "$ip" ]]; then
+        echo "$fqdn:$ip" | tee -a host_ip.txt
+        echo "$ip" >> tmp_ips.txt
+    fi
+
+done < hosts.txt
+
+# Extract /24 subnets and save
+awk -F. '{print $1"."$2"."$3".0/24"}' tmp_ips.txt | sort -u > subnets.txt
+
+# Cleanup
+rm -f tmp_ips.txt
