@@ -1,0 +1,52 @@
+🧹 Step 1: Fully Remove Docker & Docker Compose
+Run this to clean out everything:
+
+bash
+Copy code
+sudo systemctl stop docker
+sudo apt purge -y docker.io docker-doc docker-compose docker-compose-plugin docker-ce docker-ce-cli containerd runc
+sudo apt autoremove -y
+sudo rm -rf /var/lib/docker /etc/docker
+sudo rm -rf /var/lib/containerd
+sudo rm -f /usr/bin/docker-compose
+sudo rm -f /usr/local/bin/docker-compose
+sudo rm -rf /etc/apt/sources.list.d/docker.list
+sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
+🌐 Step 2: Fix DNS (Optional but Recommended)
+Edit /etc/resolv.conf to ensure you can resolve external domains:
+
+bash
+Copy code
+sudo bash -c 'echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf'
+🔐 Step 3: Add Docker GPG Key & Repo
+bash
+Copy code
+sudo apt update
+sudo apt install -y ca-certificates curl gnupg lsb-release
+
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | \
+  sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo \
+"deb [arch=$(dpkg --print-architecture) \
+signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/debian \
+$(lsb_release -cs) stable" | \
+sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+📦 Step 4: Install Docker and Compose
+bash
+Copy code
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+✅ Step 5: Verify Installation
+bash
+Copy code
+# Should show docker version
+docker --version
+
+# Should show compose plugin version
+docker compose version
+
+# Test docker works
+sudo docker run hello-world
