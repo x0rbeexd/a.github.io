@@ -26,3 +26,55 @@ $6 ~ /READ|WRITE/ && $5 !~ exclude {
 ' "$INPUT"
 
 echo "[+] Grouped output saved to $OUTPUT"
+
+
+
+
+import re
+import xlsxwriter
+
+INPUT_FILE = "nxc_output.txt"
+OUTPUT_FILE = "parsed_shares.xlsx"
+
+# Exclude system shares
+EXCLUDED_SHARES = {"ADMIN$", "C$", "IPC$", "NETLOGON", "SYSVOL"}
+
+# Initialize workbook
+workbook = xlsxwriter.Workbook(OUTPUT_FILE)
+worksheet = workbook.add_worksheet("Filtered Shares")
+
+# Header
+headers = ["IP", "Hostname", "Share", "Permissions"]
+for col, h in enumerate(headers):
+    worksheet.write(0, col, h)
+
+row = 1
+current_ip = ""
+current_hostname = ""
+
+with open(INPUT_FILE, "r", encoding="utf-8") as file:
+    for line in file:
+        parts = line.strip().split()
+        if len(parts) < 6:
+            continue
+
+        # Detect host line
+        if parts[4] == "[*]" and parts[5] == "Enumerated" and parts[6] == "shares":
+            current_ip = parts[1]
+            current_hostname = parts[3]
+            continue
+
+        # Parse valid share entries
+        if parts[0] == "SMB" and parts[4] not in EXCLUDED_SHARES:
+            share = parts[4]
+            permissions = parts[5] if parts[5] in ["READ", "WRITE", "READWRITE"] else ""
+
+            if permissions:  # Only include shares with actual permissions
+                worksheet.write(row, 0, current_ip)
+                worksheet.write(row, 1, current_hostname)
+                worksheet.write(row, 2, share)
+                worksheet.write(row, 3, permissions)
+                row += 1
+
+workbook.close()
+print(f"[+] Parsed and saved to {OUTPUT_FILE}")
