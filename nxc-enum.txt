@@ -1,31 +1,36 @@
 #!/bin/bash
 
-input_file="hostnames.txt"
-output_file="smb_rw_results.txt"
+INPUT="hostnames.txt"
+OUTPUT="rw_shares.txt"
+USERNAME="youruser"
+PASSWORD="yourpass"
+DOMAIN="yourdomain"
 
-> "$output_file" # Empty the output file
+# Clean output file
+> "$OUTPUT"
 
-while read -r host; do
-    echo "[*] Checking host: $host" | tee -a "$output_file"
+while read -r HOST; do
+    echo "[*] Checking $HOST" | tee -a "$OUTPUT"
+    
+    # Get shares
+    SHARES=$(nxc smb shares "$HOST" -u "$USERNAME" -p "$PASSWORD" -d "$DOMAIN" 2>/dev/null | grep -i 'Disk' | awk '{print $1}')
 
-    # List shares
-    nxc smb shares "$host" -v --timeout 5 > tmp_shares.txt 2>/dev/null
+    for SHARE in $SHARES; do
+        echo "  [+] Testing share $SHARE" | tee -a "$OUTPUT"
 
-    # Parse each share and try accessing it
-    grep -i "Disk" tmp_shares.txt | awk '{print $1}' | while read -r share; do
-        echo "    [+] Testing share: $share" | tee -a "$output_file"
-
-        # Try uploading a test file
-        echo "test" > testfile.txt
-        if nxc smb put "$host" "$share" testfile.txt /testfile.txt --timeout 5 &>/dev/null; then
-            echo "        [RW] Writable: \\\\$host\\$share" | tee -a "$output_file"
-            # Clean up
-            nxc smb delete "$host" "$share" /testfile.txt --timeout 5 &>/dev/null
+        # Try uploading a dummy file
+        echo "testfile" > /tmp/testfile.txt
+        nxc smb put "$HOST" "$SHARE" /tmp/testfile.txt /testfile.txt -u "$USERNAME" -p "$PASSWORD" -d "$DOMAIN" --timeout 3 &>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            echo "    [RW] Writable: \\\\$HOST\\$SHARE" | tee -a "$OUTPUT"
+            # Cleanup
+            nxc smb delete "$HOST" "$SHARE" /testfile.txt -u "$USERNAME" -p "$PASSWORD" -d "$DOMAIN" --timeout 3 &>/dev/null
         else
-            echo "        [RO] Read-only or inaccessible: \\\\$host\\$share" | tee -a "$output_file"
+            echo "    [RO] Read-only or inaccessible: \\\\$HOST\\$SHARE" | tee -a "$OUTPUT"
         fi
     done
-    echo "" >> "$output_file"
-done < "$input_file"
+    echo "" >> "$OUTPUT"
+done < "$INPUT"
 
-rm -f testfile.txt tmp_shares.txt
+rm -f /tmp/testfile.txt
