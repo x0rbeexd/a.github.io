@@ -1,0 +1,29 @@
+#!/bin/bash
+
+INPUT="nxc_output.txt"
+OUTPUT="parsed_smb_shares.txt"
+
+echo -e "HOST/IP\tPORT\tSHARE\tPERMISSIONS\tREMARK" > "$OUTPUT"
+
+awk '
+/^SMB/ {
+    if ($5 == "[*]") {
+        host = $2
+        port = $3
+    } else if ($6 == "Permissions") {
+        next  # skip header line
+    } else if ($6 != "[*]" && $4 != "-----") {
+        share = $5
+        perm  = ($6 ~ /^[A-Z]/ ? $6 : "")
+        remark_start = (perm == "" ? 6 : 7)
+        remark = ""
+        for (i = remark_start; i <= NF; i++) {
+            remark = remark $i " "
+        }
+        gsub(/^[ \t]+|[ \t]+$/, "", remark)
+        print host "\t" port "\t" share "\t" perm "\t" remark
+    }
+}
+' "$INPUT" >> "$OUTPUT"
+
+echo "[+] Output written to $OUTPUT"
