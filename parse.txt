@@ -1,1 +1,28 @@
 awk '$6 ~ /READ|WRITE/ { print $2, $4, $5, $6 }' nxc_output.txt > filtered_shares.txt
+
+
+
+#!/bin/bash
+
+INPUT="nxc_output.txt"
+OUTPUT="final_filtered_grouped.txt"
+
+# List of excluded system shares
+EXCLUDE_RE="^(C\$|ADMIN\$|IPC\$|NETLOGON|SYSVOL)$"
+
+> "$OUTPUT" # Clear output
+
+awk -v exclude="$EXCLUDE_RE" '
+$6 == "Enumerated" && $7 == "shares" {
+    current_ip = $2;
+    current_host = $4;
+    print current_ip, current_host >> "'$OUTPUT'"
+    next
+}
+
+$6 ~ /READ|WRITE/ && $5 !~ exclude {
+    printf "    %-20s %s\n", $5, $6 >> "'$OUTPUT'"
+}
+' "$INPUT"
+
+echo "[+] Grouped output saved to $OUTPUT"
