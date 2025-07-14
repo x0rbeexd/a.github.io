@@ -1,0 +1,31 @@
+#!/bin/bash
+
+input_file="hostnames.txt"
+output_file="smb_rw_results.txt"
+
+> "$output_file" # Empty the output file
+
+while read -r host; do
+    echo "[*] Checking host: $host" | tee -a "$output_file"
+
+    # List shares
+    nxc smb shares "$host" -v --timeout 5 > tmp_shares.txt 2>/dev/null
+
+    # Parse each share and try accessing it
+    grep -i "Disk" tmp_shares.txt | awk '{print $1}' | while read -r share; do
+        echo "    [+] Testing share: $share" | tee -a "$output_file"
+
+        # Try uploading a test file
+        echo "test" > testfile.txt
+        if nxc smb put "$host" "$share" testfile.txt /testfile.txt --timeout 5 &>/dev/null; then
+            echo "        [RW] Writable: \\\\$host\\$share" | tee -a "$output_file"
+            # Clean up
+            nxc smb delete "$host" "$share" /testfile.txt --timeout 5 &>/dev/null
+        else
+            echo "        [RO] Read-only or inaccessible: \\\\$host\\$share" | tee -a "$output_file"
+        fi
+    done
+    echo "" >> "$output_file"
+done < "$input_file"
+
+rm -f testfile.txt tmp_shares.txt
