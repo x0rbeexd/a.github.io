@@ -30,59 +30,60 @@ echo "[+] Grouped output saved to $OUTPUT"
 
 
 
-import xlsxwriter
 import re
+import csv
 
-INPUT_FILE = "nxc_output.txt"
-OUTPUT_FILE = "parsed_shares.xlsx"
+input_file = "nxc_output.txt"
+output_file = "parsed_shares.csv"
 
-# Excluded system shares
-EXCLUDED_SHARES = {"ADMIN$", "C$", "IPC$", "NETLOGON", "SYSVOL"}
+# Define excluded share names
+excluded_shares = {"ADMIN$", "C$", "IPC$", "NETLOGON", "SYSVOL"}
+valid_permissions = {"READ", "WRITE", "READWRITE"}
 
-# Output Excel file
-workbook = xlsxwriter.Workbook(OUTPUT_FILE)
-worksheet = workbook.add_worksheet("Filtered SMB Shares")
-headers = ["IP", "Hostname", "Share", "Permissions"]
-for col, header in enumerate(headers):
-    worksheet.write(0, col, header)
+# Prepare output rows
+rows = []
 
-row = 1
 current_ip = ""
 current_hostname = ""
 
-with open(INPUT_FILE, "r", encoding="utf-8") as f:
+with open(input_file, "r", encoding="utf-8") as f:
     for line in f:
         line = line.strip()
 
-        # Detect host + hostname block
-        if re.search(r"\[\*\] Enumerated shares$", line):
+        # Detect new host block
+        if "[*] Enumerated shares" in line:
             parts = line.split()
-            if len(parts) >= 5:
+            if len(parts) >= 4:
                 current_ip = parts[1]
                 current_hostname = parts[3]
-
-        # Skip column headers / dashes / irrelevant lines
-        if any(x in line for x in ["Share", "-----", "Enumerated shares"]):
             continue
 
-        # Parse valid share line
-        parts = line.split()
-        if len(parts) < 6 or parts[0] != "SMB":
+        # Skip headers, dashed lines, or malformed
+        if any(x in line for x in ["Share", "-----", "[*]"]):
+            continue
+        if not line.startswith("SMB"):
             continue
 
-        share_name = parts[4]
-        permission = parts[5] if parts[5] in ["READ", "WRITE", "READWRITE"] else ""
-
-        # Skip excluded shares and empty permissions
-        if share_name in EXCLUDED_SHARES or not permission:
+        parts = line.split(None, 6)
+        if len(parts) < 6:
             continue
 
-        # Write to Excel
-        worksheet.write(row, 0, current_ip)
-        worksheet.write(row, 1, current_hostname)
-        worksheet.write(row, 2, share_name)
-        worksheet.write(row, 3, permission)
-        row += 1
+        share = parts[4]
+        permission = parts[5]
 
-workbook.close()
-print(f"[+] Done. Parsed {row - 1} shares. Output: {OUTPUT_FILE}")
+        if share in excluded_shares:
+            continue
+        if permission not in valid_permissions:
+            continue
+
+        rows.append([current_ip, current_hostname, share, permission])
+
+# Save to CSV
+with open(output_file, "w", newline="", encoding="utf-8") as f:
+    writer = csv.writer(f)
+    writer.writerow(["IP", "Hostname", "Share", "Permissions"])
+    writer.writerows(rows)
+
+print(f"[+] Parsed {len(rows)} share entries.")
+print(f"[+] Output saved to {output_file}")
+
