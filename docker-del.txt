@@ -7,3 +7,4 @@ docker volume rm $(docker volume ls -q)
 docker volume rm $(docker volume ls -q)
 docker network rm $(docker network ls | grep -v "bridge\|host\|none" | awk '{print $1}')
 
+nxc smb --shares --filter-shares read,write --exclude-dirs IPC$ PRINT$ -t 100 --timeout 3 --no-progress -u YOUR_USER -p YOUR_PASS -d YOUR_DOMAIN targets.txt
