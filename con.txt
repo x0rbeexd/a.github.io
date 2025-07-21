@@ -1,0 +1,10 @@
+$Username = "DOMAIN-B\user"
+$Password = "Password123"
+
+$entry = New-Object System.DirectoryServices.DirectoryEntry("LDAP://domain-b.com", $Username, $Password)
+try {
+    $null = $entry.NativeObject
+    Write-Host "✅ Credentials are valid"
+} catch {
+    Write-Host "❌ Invalid credentials"
+}
