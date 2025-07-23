@@ -1,0 +1,11 @@
+1. Generate the TImestamp IP Hostname and the Share froma nxc write-malicous-File log file ( can be used for Reporting) 
+
+grep 'Created LNK file on the' your_log_file.txt | \
+awk -F'SLINKY |share' '{ 
+    split($2, a, " "); 
+    ip=a[1]; 
+    hostname=a[3]; 
+    time=gensub(/^.*:([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9.]{8}).*$/, "\\1", "g", $0); 
+    share=gensub(/^.*on the (.*)$/, "\\1", "g", $0); 
+    print time, ip, hostname, share 
+}' | sort -u
