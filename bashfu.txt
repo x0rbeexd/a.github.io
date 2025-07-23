@@ -88,3 +88,29 @@ grep 'Created LNK file on the' $LOGFILES | while IFS= read -r line; do
         echo "$timestamp | $ip | $hostname | $sharename"
     fi
 done | sort -u
+
+
+
+
+
+awk -F'SLINKY ' '
+/Created LNK file on the/ {
+  # Extract the timestamp after the first colon
+  match($0, /:([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9.]{8})/, t)
+  time = t[1]
+
+  # Now work on the SLINKY part (second field)
+  split($2, a, " ")
+
+  ip = a[1]
+  hostname = a[4]
+
+  # Extract the share name (can have spaces) using regex
+  match($0, /on the (.*) share/, s)
+  share = s[1]
+
+  # Output
+  print time " | " ip " | " hostname " | " share
+}
+' your_log_file.log | sort -u
+
