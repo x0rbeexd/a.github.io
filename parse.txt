@@ -88,55 +88,13 @@ with open(output_file, "w") as out:
 
 
 
+grep "READ" yourfile.txt | awk '!/ADMIN\$|C\$|IPC\$|print\$|SYSVOL|NETLOGON/ {print $6 " " $8}' | sort | uniq | awk '{a[$1]=a[$1] ", " $2} END {for (i in a) print i ":" substr(a[i], 3)}' > readable_shares.txt
 
-
-
-
-from collections import defaultdict
-
-log_file = "yourfile.txt"
-output_file = "readable_shares.txt"
-
-excluded_shares = {'ADMIN$', 'C$', 'IPC$', 'print$', 'SYSVOL', 'NETLOGON'}
-shares_by_host = defaultdict(set)
-
-current_ip = None
-current_host = None
-processing = False
-
-with open(log_file, "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
-
-        # Step 1: Detect share block start
-        if "[*] Enumerated shares" in line:
-            parts = line.split()
-            try:
-                idx = parts.index("SMB")
-                current_ip = parts[idx + 1]
-                current_host = parts[idx + 3]
-                processing = True
-            except (ValueError, IndexError):
-                continue
-            continue
-
-        # Step 2: Parse share lines
-        if processing:
-            parts = line.split()
-            if len(parts) >= 7:
-                share = parts[6]
-                perm = parts[7] if len(parts) > 7 else ''
-                if "READ" in perm.upper() and share.upper() not in excluded_shares:
-                    key = f"{current_ip} {current_host}"
-                    shares_by_host[key].add(share)
-            elif "INFO" not in line:
-                processing = False
-
-# Step 3: Write output
-with open(output_file, "w", encoding="utf-8") as out:
-    for ip_host, shares in shares_by_host.items():
-        if shares:
-            out.write(f"{ip_host}: {', '.join(sorted(shares))}\n")
+cat readable_shares.txt | while IFS=":" read -r ip shares; do
+  for share in $(echo "$shares" | tr ',' '\n'); do
+    echo "${ip}\\\\$(echo $share | xargs)"
+  done
+done > flat_share_list.txt
 
 
 
