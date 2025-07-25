@@ -34,13 +34,14 @@ echo "[+] Grouped output saved to $OUTPUT"
 import re
 from collections import defaultdict
 
-log_file = "yourfile.txt"      # Replace with your log filename
+log_file = "yourfile.txt"
 output_file = "readable_shares.txt"
 
-# List of excluded shares
-excluded_shares = {'ADMIN$', 'C$', 'IPC$', 'SYSVOL', 'NETLOGON', 'print$'}
+# Define patterns and exclusions
+start_pattern = re.compile(r"Enumerated shares")
+share_line_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}.*?(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\S+)\s+([^\s]+)\s+(READ)\s*", re.IGNORECASE)
+excluded_shares = {'ADMIN$', 'C$', 'IPC$', 'print$', 'SYSVOL', 'NETLOGON'}
 
-# Store shares per "IP HOSTNAME"
 shares_by_host = defaultdict(set)
 
 with open(log_file, "r", encoding="utf-8") as f:
@@ -48,37 +49,31 @@ with open(log_file, "r", encoding="utf-8") as f:
 
 current_ip = None
 current_host = None
-processing = False
+processing_shares = False
 
 for line in lines:
-    line = line.strip()
-
-    # If share enumeration starts, extract IP and hostname
-    if "[*] Enumerated shares" in line:
-        match = re.search(r"SMB\s+(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\S+)", line)
-        if match:
-            current_ip = match.group(1)
-            current_host = match.group(2)
-            processing = True
+    if "Enumerated shares" in line:
+        # Look backward to get IP and Host
+        parts = line.split()
+        if len(parts) >= 10:
+            current_ip = parts[5].strip()
+            current_host = parts[7].strip()
+            processing_shares = True
         continue
 
-    # If we are in processing mode and this line looks like a share line
-    if processing:
-        parts = re.split(r'\s{2,}', line)
-        if len(parts) >= 2:
-            share = parts[0].strip()
-            perm = parts[1].strip()
-            if "READ" in perm.upper() and share.upper() not in excluded_shares:
-                key = f"{current_ip} {current_host}"
-                shares_by_host[key].add(share)
-        elif "INFO" in line and "Enumerated shares" not in line:
-            # Stop processing if a new unrelated log line appears
-            processing = False
+    if processing_shares:
+        match = share_line_pattern.match(line)
+        if match:
+            ip, hostname, share_name, perm = match.groups()
+            if share_name.upper() not in excluded_shares:
+                shares_by_host[f"{ip} {hostname}"].add(share_name)
+        elif "INFO" not in line:
+            # Assume we're done with the current block
+            processing_shares = False
 
-# Write output
-with open(output_file, "w") as f:
-    for host, shares in sorted(shares_by_host.items()):
-        if shares:
-            f.write(f"{host}: {', '.join(sorted(shares))}\n")
-
-
+# Write the output
+with open(output_file, "w") as out:
+    for ip_host in sorted(shares_by_host):
+        share_list = sorted(shares_by_host[ip_host])
+        if share_list:
+            out.write(f"{ip_host}: {', '.join(share_list)}\n")
