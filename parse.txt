@@ -98,45 +98,46 @@ from collections import defaultdict
 log_file = "yourfile.txt"
 output_file = "readable_shares.txt"
 
-# Shares to ignore
 excluded_shares = {'ADMIN$', 'C$', 'IPC$', 'print$', 'SYSVOL', 'NETLOGON'}
-
 shares_by_host = defaultdict(set)
-
-with open(log_file, "r", encoding="utf-8") as f:
-    lines = f.readlines()
 
 current_ip = None
 current_host = None
 processing = False
 
-for line in lines:
-    line = line.strip()
+with open(log_file, "r", encoding="utf-8") as f:
+    for line in f:
+        line = line.strip()
 
-    if "[*] Enumerated shares" in line:
-        match = re.search(r"SMB\s+(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\S+)", line)
-        if match:
-            current_ip = match.group(1)
-            current_host = match.group(2)
-            processing = True
-        continue
+        # Detect start of a share block
+        if "[*] Enumerated shares" in line:
+            match = re.search(r"SMB\s+(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\S+)", line)
+            if match:
+                current_ip = match.group(1)
+                current_host = match.group(2)
+                processing = True
+            continue
 
-    if processing:
-        parts = re.split(r'\s{2,}', line)
-        if len(parts) >= 2:
-            share = parts[0].strip()
-            perm = parts[1].strip()
-            if "READ" in perm.upper() and share.upper() not in excluded_shares:
-                key = f"{current_ip} {current_host}"
-                shares_by_host[key].add(share)
-        elif "INFO" in line and "Enumerated shares" not in line:
-            # Stop on unrelated log lines
-            processing = False
+        # If we're in a share enumeration block
+        if processing:
+            if "INFO" in line and not re.search(r"(READ|WRITE|FULL)", line, re.IGNORECASE):
+                continue  # Still part of SMB log but not a share line
+            parts = re.split(r'\s{2,}', line)
+            if len(parts) >= 2:
+                share = parts[0].strip()
+                perm = parts[1].strip().upper()
+                if "READ" in perm and share.upper() not in excluded_shares:
+                    key = f"{current_ip} {current_host}"
+                    shares_by_host[key].add(share)
+            else:
+                # End of current share block
+                processing = False
 
 # Write output
-with open(output_file, "w") as out:
+with open(output_file, "w", encoding="utf-8") as out:
     for ip_host in sorted(shares_by_host):
         share_list = sorted(shares_by_host[ip_host])
         if share_list:
             out.write(f"{ip_host}: {', '.join(share_list)}\n")
+
 
