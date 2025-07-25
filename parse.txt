@@ -29,61 +29,53 @@ echo "[+] Grouped output saved to $OUTPUT"
 
 
 
+ ---------------------------- Pasrse For Only Redable shares by using nxc logs
 
 import re
-import csv
+from collections import defaultdict
 
-input_file = "nxc_output.txt"
-output_file = "parsed_shares.csv"
+log_file = "yourfile.txt"
+output_file = "readable_shares.txt"
 
-# Define excluded share names
-excluded_shares = {"ADMIN$", "C$", "IPC$", "NETLOGON", "SYSVOL"}
-valid_permissions = {"READ", "WRITE", "READWRITE"}
+# Define patterns and exclusions
+start_pattern = re.compile(r"Enumerated shares")
+share_line_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}.*?(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\S+)\s+([^\s]+)\s+(READ)\s*", re.IGNORECASE)
+excluded_shares = {'ADMIN$', 'C$', 'IPC$', 'print$', 'SYSVOL', 'NETLOGON'}
 
-# Prepare output rows
-rows = []
+shares_by_host = defaultdict(set)
 
-current_ip = ""
-current_hostname = ""
+with open(log_file, "r", encoding="utf-8") as f:
+    lines = f.readlines()
 
-with open(input_file, "r", encoding="utf-8") as f:
-    for line in f:
-        line = line.strip()
+current_ip = None
+current_host = None
+processing_shares = False
 
-        # Detect new host block
-        if "[*] Enumerated shares" in line:
-            parts = line.split()
-            if len(parts) >= 4:
-                current_ip = parts[1]
-                current_hostname = parts[3]
-            continue
+for line in lines:
+    if "Enumerated shares" in line:
+        # Look backward to get IP and Host
+        parts = line.split()
+        if len(parts) >= 10:
+            current_ip = parts[5].strip()
+            current_host = parts[7].strip()
+            processing_shares = True
+        continue
 
-        # Skip headers, dashed lines, or malformed
-        if any(x in line for x in ["Share", "-----", "[*]"]):
-            continue
-        if not line.startswith("SMB"):
-            continue
+    if processing_shares:
+        match = share_line_pattern.match(line)
+        if match:
+            ip, hostname, share_name, perm = match.groups()
+            if share_name.upper() not in excluded_shares:
+                shares_by_host[f"{ip} {hostname}"].add(share_name)
+        elif "INFO" not in line:
+            # Assume we're done with the current block
+            processing_shares = False
 
-        parts = line.split(None, 6)
-        if len(parts) < 6:
-            continue
+# Write the output
+with open(output_file, "w") as out:
+    for ip_host in sorted(shares_by_host):
+        share_list = sorted(shares_by_host[ip_host])
+        if share_list:
+            out.write(f"{ip_host}: {', '.join(share_list)}\n")
 
-        share = parts[4]
-        permission = parts[5]
-
-        if share in excluded_shares:
-            continue
-        if permission not in valid_permissions:
-            continue
-
-        rows.append([current_ip, current_hostname, share, permission])
-
-# Save to CSV
-with open(output_file, "w", newline="", encoding="utf-8") as f:
-    writer = csv.writer(f)
-    writer.writerow(["IP", "Hostname", "Share", "Permissions"])
-    writer.writerows(rows)
-
-print(f"[+] Parsed {len(rows)} share entries.")
-print(f"[+] Output saved to {output_file}")
 
