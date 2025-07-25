@@ -88,13 +88,7 @@ with open(output_file, "w") as out:
 
 
 
-grep "READ" yourfile.txt | awk '!/ADMIN\$|C\$|IPC\$|print\$|SYSVOL|NETLOGON/ {print $6 " " $8}' | sort | uniq | awk '{a[$1]=a[$1] ", " $2} END {for (i in a) print i ":" substr(a[i], 3)}' > readable_shares.txt
-
-cat readable_shares.txt | while IFS=":" read -r ip shares; do
-  for share in $(echo "$shares" | tr ',' '\n'); do
-    echo "${ip}\\\\$(echo $share | xargs)"
-  done
-done > flat_share_list.txt
+grep -v "print\$" yourfile.txt | awk -F'[: ]+' '{shares[$1] = (shares[$1] ? shares[$1] ", " : "") $NF} END {for (ip in shares) print ip ": " shares[ip]}' > cleaned_shares.txt
 
 
 
