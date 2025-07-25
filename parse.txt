@@ -86,7 +86,7 @@ with open(output_file, "w") as out:
 
 
 
-
+Remove Print$ share
 
 awk -F':' '
 {
@@ -108,4 +108,5 @@ awk -F':' '
 ' yourfile.txt > cleaned_shares.txt
 
 
+awk -F':' '{ip=gensub(/ .*/, "", "g", $1); split($2, shares, ","); for (i in shares) {gsub(/^ +| +$/, "", shares[i]); print ip "\\" shares[i]}}' cleaned_file.txt
 
