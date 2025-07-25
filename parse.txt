@@ -88,7 +88,24 @@ with open(output_file, "w") as out:
 
 
 
-grep -v "print\$" yourfile.txt | awk -F'[: ]+' '{shares[$1] = (shares[$1] ? shares[$1] ", " : "") $NF} END {for (ip in shares) print ip ": " shares[ip]}' > cleaned_shares.txt
+awk -F':' '
+{
+    ip = $1
+    gsub(/^ +| +$/, "", ip)  # trim whitespace
+    split($2, shares, ",")
+    clean_shares = ""
+    for (i in shares) {
+        share = shares[i]
+        gsub(/^ +| +$/, "", share)
+        if (tolower(share) != "print$") {
+            clean_shares = (clean_shares == "" ? share : clean_shares ", " share)
+        }
+    }
+    if (clean_shares != "") {
+        print ip ": " clean_shares
+    }
+}
+' yourfile.txt > cleaned_shares.txt
 
 
 
