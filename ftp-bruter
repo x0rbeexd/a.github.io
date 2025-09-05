@@ -1,60 +1,151 @@
-import ftplib
-import socket
+#!/usr/bin/env python3
+"""
+ftp_checker.py
+Improved FTP credential checker with debug, passive toggle, and FTPS support.
+"""
 import argparse
-import json
 import itertools
-
-def check_ftp_login(host, port, username, password, timeout=5):
-    try:
-        ftp = ftplib.FTP()
-        ftp.connect(host, port, timeout=timeout)
-        ftp.login(user=username, passwd=password)
-        print(f"[+] Success: {username}:{password}")
-        
-        try:
-            files = ftp.nlst()
-        except Exception as e:
-            files = [f"Could not list files: {str(e)}"]
-
-        ftp.quit()
-        return {"username": username, "password": password, "success": True, "files": files}
-
-    except ftplib.error_perm:
-        print(f"[-] Failed login: {username}:{password}")
-        return {"username": username, "password": password, "success": False, "files": []}
-    except (socket.error, socket.timeout) as e:
-        print(f"[!] Connection error: {str(e)}")
-        return {"username": username, "password": password, "success": False, "error": str(e)}
-
+import json
+import socket
+import time
+from ftplib import FTP, FTP_TLS, error_perm
+import ssl
 
 def load_file(path):
-    with open(path, "r") as f:
-        return [line.strip() for line in f if line.strip()]
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+        return [line.rstrip("\r\n") for line in f if line.strip()]
 
+def list_files(ftp):
+    items = []
+    try:
+        ftp.retrlines('LIST', lambda line: items.append(line))
+        if items:
+            return items
+    except Exception:
+        pass
+    try:
+        return ftp.nlst()
+    except Exception as e:
+        return [f"Could not list files: {e}"]
+
+def try_plain(host, port, username, password, timeout, pasv, debug):
+    ftp = FTP()
+    if debug:
+        ftp.set_debuglevel(2)
+    ftp.connect(host, port, timeout=timeout)
+    ftp.set_pasv(pasv)
+    welcome = ftp.getwelcome()
+    # attempt login
+    ftp.login(user=username, passwd=password)
+    files = list_files(ftp)
+    ftp.quit()
+    return {"mode": "plain", "welcome": welcome, "files": files}
+
+def try_explicit_tls(host, port, username, password, timeout, pasv, debug):
+    ftps = FTP_TLS()
+    if debug:
+        ftps.set_debuglevel(2)
+    ftps.connect(host, port, timeout=timeout)
+    # use explicit TLS (AUTH TLS)
+    # login over TLS or upgrade after login depending on server
+    try:
+        ftps.auth()  # try to switch to TLS first
+    except Exception:
+        # some servers don't need explicit auth() before login; fall back
+        pass
+    ftps.login(user=username, passwd=password)
+    # protect data channel
+    try:
+        ftps.prot_p()
+    except Exception:
+        pass
+    ftps.set_pasv(pasv)
+    welcome = ftps.getwelcome()
+    files = list_files(ftps)
+    ftps.quit()
+    return {"mode": "ftps-explicit", "welcome": welcome, "files": files}
+
+def check_credential(host, port, username, password, timeout=10, try_modes=("plain","ftps"), pasv_options=(True,False), debug=False):
+    last_err = None
+    for mode in try_modes:
+        for pasv in pasv_options:
+            try:
+                if mode == "plain":
+                    res = try_plain(host, port, username, password, timeout, pasv, debug)
+                elif mode == "ftps":
+                    res = try_explicit_tls(host, port, username, password, timeout, pasv, debug)
+                else:
+                    continue
+                return {"username": username, "password": password, "success": True, "mode": mode, "pasv": pasv, "welcome": res.get("welcome"), "files": res.get("files")}
+            except error_perm as e:
+                # permission error (wrong creds)
+                last_err = str(e)
+            except (socket.timeout, socket.error, ssl.SSLError) as e:
+                last_err = str(e)
+            except Exception as e:
+                last_err = str(e)
+    return {"username": username, "password": password, "success": False, "error": last_err}
 
 def main():
-    parser = argparse.ArgumentParser(description="FTP Credential Checker")
-    parser.add_argument("--host", required=True, help="Target host IP/Domain")
-    parser.add_argument("--port", type=int, default=21, help="Target port (default=21)")
-    parser.add_argument("--userlist", required=True, help="File containing usernames")
-    parser.add_argument("--passlist", required=True, help="File containing passwords")
-    parser.add_argument("--output", default="ftp_results.json", help="Output JSON file")
-
+    parser = argparse.ArgumentParser(description="Robust FTP credential checker")
+    parser.add_argument("--host", required=True)
+    parser.add_argument("--port", type=int, default=21)
+    parser.add_argument("--userlist", required=True)
+    parser.add_argument("--passlist", required=True)
+    parser.add_argument("--output", default="ftp_results.json")
+    parser.add_argument("--delay", type=float, default=0.3, help="Delay between attempts (seconds)")
+    parser.add_argument("--timeout", type=int, default=10)
+    parser.add_argument("--debug", action="store_true", help="Enable ftplib debug output")
+    parser.add_argument("--mode", choices=["auto","plain","ftps"], default="auto", help="Which protocols to try")
+    parser.add_argument("--pasv", choices=["auto","true","false"], default="auto", help="Passive mode attempts")
+    parser.add_argument("--spray", action="store_true", help="Use credential-spray ordering (try one password across all users first)")
     args = parser.parse_args()
 
-    usernames = load_file(args.userlist)
-    passwords = load_file(args.passlist)
+    users = load_file(args.userlist)
+    pwds = load_file(args.passlist)
+    print(f"Loaded {len(users)} users, {len(pwds)} passwords")
+
+    try_modes = []
+    if args.mode == "auto":
+        try_modes = ("ftps","plain")  # prefer ftps first
+    elif args.mode == "plain":
+        try_modes = ("plain",)
+    else:
+        try_modes = ("ftps",)
+
+    if args.pasv == "auto":
+        pasv_options = (True, False)
+    elif args.pasv == "true":
+        pasv_options = (True,)
+    else:
+        pasv_options = (False,)
 
     results = []
-    for username, password in itertools.product(usernames, passwords):
-        result = check_ftp_login(args.host, args.port, username, password)
-        results.append(result)
 
-    with open(args.output, "w") as f:
-        json.dump(results, f, indent=4)
+    combos = []
+    if args.spray:
+        for p in pwds:
+            for u in users:
+                combos.append((u, p))
+    else:
+        combos = list(itertools.product(users, pwds))
 
-    print(f"\n[+] Results saved in {args.output}")
+    for idx, (u, p) in enumerate(combos, 1):
+        # show representation to find stray whitespace/newline chars
+        print(f"[{idx}/{len(combos)}] Trying {repr(u)} : {repr(p)}")
+        res = check_credential(args.host, args.port, u, p, timeout=args.timeout, try_modes=try_modes, pasv_options=pasv_options, debug=args.debug)
+        results.append(res)
+        if res.get("success"):
+            print("[+] SUCCESS:", res["username"], res["password"], "mode:", res["mode"], "pasv:", res["pasv"])
+            for line in res.get("files", []):
+                print("   ", line)
+        else:
+            print("[-] Failed:", repr(res.get("error")))
+        time.sleep(args.delay)
 
+    with open(args.output, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+    print("Saved results to", args.output)
 
 if __name__ == "__main__":
     main()
