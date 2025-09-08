@@ -1,15 +1,35 @@
 import base64
 import struct
 
+def extract_ntlm_from_negotiate(header_value):
+    """
+    Extract NTLM token from a Negotiate (SPNEGO) header.
+    Returns the NTLM token as base64 string.
+    """
+    token = header_value.strip()
+    if token.startswith("Negotiate "):
+        token = token[len("Negotiate "):]
+    spnego_bytes = base64.b64decode(token)
+
+    # NTLMSSP signature appears inside SPNEGO
+    ntlm_start = spnego_bytes.find(b"NTLMSSP")
+    if ntlm_start == -1:
+        raise ValueError("No NTLM token found inside Negotiate header")
+    
+    ntlm_token = spnego_bytes[ntlm_start:]
+    return base64.b64encode(ntlm_token).decode()
+
+
 def decode_ntlm_message(ntlm_header):
+    """
+    Decode NTLM message (base64 string starting with NTLMSSP).
+    Returns a dictionary with message details.
+    """
     token = ntlm_header.strip()
     if token.startswith("NTLM "):
         token = token[5:]
 
-    try:
-        msg = base64.b64decode(token)
-    except Exception as e:
-        raise ValueError(f"Invalid base64 data: {e}")
+    msg = base64.b64decode(token)
 
     if msg[:7] != b"NTLMSSP":
         raise ValueError("Not a valid NTLMSSP message")
@@ -19,24 +39,22 @@ def decode_ntlm_message(ntlm_header):
 
     if msg_type == 1:
         output["type_name"] = "Type 1 (Negotiate)"
-        # Flags at bytes 12-16
         flags = struct.unpack("<I", msg[12:16])[0]
         output["flags"] = f"{flags:#010x}"
-        # Domain and workstation lengths/offsets (optional)
-        output["domain_length"] = struct.unpack("<H", msg[16:18])[0]
-        output["workstation_length"] = struct.unpack("<H", msg[24:26])[0]
+        dom_len = struct.unpack("<H", msg[16:18])[0]
+        ws_len = struct.unpack("<H", msg[24:26])[0]
+        output["domain_length"] = dom_len
+        output["workstation_length"] = ws_len
 
     elif msg_type == 2:
         output["type_name"] = "Type 2 (Challenge)"
-        # Server challenge at bytes 24-32
         challenge = msg[24:32].hex()
         output["challenge"] = challenge
-        # Target info (optional)
         tgt_info_len = struct.unpack("<H", msg[40:42])[0]
         tgt_info_offset = struct.unpack("<I", msg[44:48])[0]
         if tgt_info_len > 0:
-            target_info = msg[tgt_info_offset:tgt_info_offset+tgt_info_len]
-            output["target_info"] = target_info.hex()
+            target_info = msg[tgt_info_offset:tgt_info_offset+tgt_info_len].hex()
+            output["target_info"] = target_info
 
     elif msg_type == 3:
         output["type_name"] = "Type 3 (Authenticate)"
@@ -49,7 +67,7 @@ def decode_ntlm_message(ntlm_header):
         # Workstation
         ws_len, _, ws_offset = struct.unpack("<HHI", msg[44:52])
         workstation = msg[ws_offset:ws_offset+ws_len].decode("utf-16le", errors="ignore")
-        # LM/NTLM response lengths (optional)
+        # LM/NTLM responses
         lm_len, _, lm_offset = struct.unpack("<HHI", msg[12:20])
         nt_len, _, nt_offset = struct.unpack("<HHI", msg[20:28])
         lm_resp = msg[lm_offset:lm_offset+lm_len].hex()
@@ -70,12 +88,23 @@ def decode_ntlm_message(ntlm_header):
 
 
 if __name__ == "__main__":
-    print("NTLM Challenge Decoder")
-    ntlm_input = input("Enter NTLM message (base64, with or without 'NTLM ' prefix): ").strip()
+    print("=== NTLM/SPNEGO Challenge Decoder ===")
+    header_value = input("Enter Authorization or WWW-Authenticate header: ").strip()
+
     try:
-        details = decode_ntlm_message(ntlm_input)
-        print("\nDecoded NTLM Details:")
+        # Extract NTLM token if Negotiate header
+        if header_value.startswith("Negotiate "):
+            ntlm_token = extract_ntlm_from_negotiate(header_value)
+            print("[*] Extracted NTLM token from Negotiate header.")
+        elif header_value.startswith("NTLM "):
+            ntlm_token = header_value
+        else:
+            raise ValueError("Header must start with 'Negotiate ' or 'NTLM '")
+
+        details = decode_ntlm_message(ntlm_token)
+        print("\n--- Decoded NTLM Details ---")
         for k, v in details.items():
             print(f"{k}: {v}")
+
     except Exception as e:
-        print(f"Error decoding NTLM message: {e}")
+        print(f"[!] Error: {e}")
