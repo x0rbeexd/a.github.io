@@ -1,0 +1,11 @@
+Get-Content .\iplist.txt | ForEach-Object {
+    $shares = net view \\$_ | Select-String '\\\\.*\$' | ForEach-Object { ($_ -split '\s+')[0] }
+    foreach ($share in $shares) {
+        try {
+            Get-ChildItem "\\$_\$share" -ErrorAction Stop | Out-Null
+            Write-Host "READ access to \\$_\$share"
+        } catch {
+            Write-Host "NO READ access to \\$_\$share"
+        }
+    }
+}
